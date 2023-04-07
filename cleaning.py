@@ -1,4 +1,5 @@
 from typing import *
+
 import os
 import argparse
 import random
@@ -12,6 +13,7 @@ from transformers import BertConfig, BertModel, BertTokenizer, BertForSequenceCl
 from special_datasets import *
 from seeds import set_seed
 import train
+from utils import *
 
 
 def get_args():
@@ -33,27 +35,6 @@ def get_args():
     parser.add_argument("--n_split", default=2, type=int)
     return parser.parse_args()
 
-
-def get_folder_abs_path(rel_path: str) -> str:
-    ans = os.path.abspath(rel_path)
-    ans = ans.replace("\\", "/") + "/"
-    return ans
-
-
-def create_folder(path: str):
-    path = os.path.abspath(path)
-    dir_name = os.path.dirname(path)
-    if not os.path.exists(dir_name):
-        os.makedirs(dir_name)
-
-
-def shuffle_array(arr: list, seed: int) -> None:
-    random.seed(seed)
-    for i in range(len(arr)):
-        j = random.randint(0, i)
-        temp = arr[j]
-        arr[j] = arr[i]
-        arr[i] = temp
 
 DEFAULT_GPU = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -128,14 +109,6 @@ hyper_params = {
     'max_len': MAX_LENGTH,
     'weight_decay': WEIGHT_DECAY
 }
-
-
-def copy_of_dict(d: dict) -> dict:
-    ans = {}
-    for key in d:
-        ans[key] = d[key]
-    return ans
-
 
 train_set = TxtDataset(DATASET_PATH)
 # for data in DataLoader(train_set,batch_size=2,shuffle=False,drop_last=False):
