@@ -1,0 +1,1 @@
+python ./cleaning.py --epoch 2 --batch_size 2 --max_len 128 --ths 0.2 --dataset pure_test_set
