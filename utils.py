@@ -24,8 +24,28 @@ def shuffle_array(arr: list, seed: int) -> None:
         arr[j] = arr[i]
         arr[i] = temp
 
+
+def try_save(path:str) -> bool:
+    try:
+        with open(path,"w") as fout:
+            fout.write("678")
+        with open(path,"r") as fin:
+            lines = fin.readlines()
+            if lines[0]=="678":
+                return True
+            return False
+        return False
+    except OSError as err:
+        print(str(err))
+        return False
+
+
 def copy_of_dict(d: dict) -> dict:
     ans = {}
     for key in d:
         ans[key] = d[key]
     return ans
+
+
+# path = "./"+"123"*40+".txt"
+# print(try_save(path))
