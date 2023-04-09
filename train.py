@@ -128,8 +128,8 @@ def train_model(tokenizer, model: torch.nn.Module, dataset: Dataset,
             input_dict = tokenizer(
                 batch[0], return_tensors='pt', padding=True, truncation=True, max_length=max_len)
             to_device(input_dict, gpu)
-            train_batch(model, input_dict, b_y, loss_func,
-                        optimizer, step % 20 == 0)
+            train_batch(model, input_dict, b_y, loss_func,optimizer)
+            #train_batch(model, input_dict, b_y, loss_func,optimizer,step%50==0)
         if best_save_path is not None:
             acc = evaluate(tokenizer=tokenizer, model=model, dataset=validset, max_len=max_len, batch_size=batch_size,
                            gpu="cuda")
