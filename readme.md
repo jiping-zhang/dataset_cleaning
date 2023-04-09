@@ -6,7 +6,9 @@ we provide some clarified datasets in the folder "./clarified_datasets"
 
 ### environment to run the code
 
-only 3 packages are required to run the code.
+only 4 packages are required to run the code.
+
+numpy
 
 pytorch
 
@@ -59,4 +61,3 @@ parameters with [] have default value.
 ```sh
 python ./clearify.py --epoch 4 --batch_size 32 --lr 2e-5 --weight_decay 1e-5 --max_len MAX_LEN 256 --ths 0.2 --dataset imdb --dataset_path ./imdb/train.txt --output_folder_path ./imdb/clarify/ --temp_folder_path ./temp/saved_models/imdb/
 ```
-
