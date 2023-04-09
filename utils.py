@@ -27,6 +27,8 @@ def shuffle_array(arr: list, seed: int) -> None:
 
 
 def try_save1(path: str) -> bool:
+    if os.path.exists(path):
+        return True
     try:
         with open(path, "w+") as fout:
             fout.write("678")
@@ -41,6 +43,8 @@ def try_save1(path: str) -> bool:
         return False
     
 def try_save(path: str) -> bool:
+    if os.path.exists(path):
+        return True
     res = try_save1(path)
     if res:
         os.remove(path)

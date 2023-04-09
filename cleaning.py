@@ -37,6 +37,7 @@ def get_args():
     parser.add_argument("--n_label", default=2, type=int)
     parser.add_argument("--seed", default=42, type=int)
     parser.add_argument("--n_split", default=2, type=int)
+    parser.add_argument("--save_deleted",default="false",type=str)
     return parser.parse_args()
 
 
@@ -104,7 +105,9 @@ CONFIG = BertConfig(num_labels=N_LABEL)
 MODEL_TYPE = "bert-base-uncased"
 CLEANED_DATASET_SAVE_FILE_NAME = f"{DATASET_NAME}_cleaned_cm{CLEAN_METHOD_REP_LETTER}({CLEAN_ARG})_split{N_SPLIT}_e{EPOCH}_b{BATCH_SIZE}_ml{MAX_LENGTH}_lr{LEARNING_RATE}_lf{LOSS_FUNC_NAME}_l2{WEIGHT_DECAY}_s{SEED}.txt"
 CLEANED_DATASET_SAVE_FILE_PATH = f"{OUTPUT_FOLDER_PATH}{CLEANED_DATASET_SAVE_FILE_NAME}"
+DELETED_DATASET_SAVE_FILE_PATH = CLEANED_DATASET_SAVE_FILE_PATH.replace("_cleaned_","_deleted_")
 assert try_save(CLEANED_DATASET_SAVE_FILE_PATH)==True,f"can not save anything to file {CLEANED_DATASET_SAVE_FILE_PATH}"
+SAVE_DELETED=True if args.save_deleted.lower()=="true" else False
 
 def get_datasets(original_dataset: Dataset, split_n: int, seed: int) -> Tuple[list, list]:
     # returns all the used datasets
@@ -201,7 +204,8 @@ pos_sets, neg_sets = get_datasets(train_set, N_SPLIT, SEED)
 
 
 tokenizer = BertTokenizer.from_pretrained(MODEL_TYPE)
-reserved_samples = list()
+all_reserved_data = list()
+all_deleted_data = list()
 for i in range(N_SPLIT):
     print(f"cleaning the subset({i})")
     this_model_save_name = f"{DATASET_NAME}_split{N_SPLIT}_neg({i})_e{EPOCH}_b{BATCH_SIZE}_ml{MAX_LENGTH}_lr{LEARNING_RATE}_lf{LOSS_FUNC_NAME}_l2{WEIGHT_DECAY}_s{SEED}.pth"
@@ -222,7 +226,12 @@ for i in range(N_SPLIT):
         else:
             print(f"other clean method <{OTHER_ARG}> is currently not supported")    
     reserved_data,deleted_data = clean(tokenizer,model,dataset=pos_sets[i],loss_func_class=LOSS_FUNC_CLASS,threshold=ths)
-    reserved_samples.extend(reserved_data)
+    all_reserved_data.extend(reserved_data)
+    if SAVE_DELETED:
+        all_deleted_data.extend(deleted_data)
 
-reserved_dataset = ListDataset(reserved_samples)
+reserved_dataset = ListDataset(all_reserved_data)
 save_dataset(reserved_dataset,CLEANED_DATASET_SAVE_FILE_PATH)
+if SAVE_DELETED:
+    deleted_dataset = ListDataset(all_deleted_data)
+    save_dataset(deleted_dataset,DELETED_DATASET_SAVE_FILE_PATH)

@@ -214,10 +214,10 @@ def train_model_freelb(tokenizer, model: torch.nn.Module, dataset: Dataset,
 def reload_or_train(path: str, train_params: dict, tokenizer=None, model=None, dataset=None, seed: int = None,
                     cpu: str = "cpu", gpu: str = DEFAULT_GPU, tqdm_desc: str = None, best_save_path: str = None,
                     validset=None, training_type='base') -> None:
-    assert try_save(path)==True,f"cannot save anything to {path}"
     if os.path.exists(path):
         model.load_state_dict(torch.load(path))
     else:
+        assert try_save(path)==True,f"cannot save anything to {path}"
         if 'tokenizer' not in train_params:
             train_params['tokenizer'] = tokenizer
         if 'model' not in train_params:
