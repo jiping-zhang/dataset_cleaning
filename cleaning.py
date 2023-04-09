@@ -24,7 +24,9 @@ def get_args():
     parser.add_argument("--weight_decay", default=0.00001, type=float)
     parser.add_argument("--max_len", required=True, type=int)
     parser.add_argument("--loss_func", default='CE', type=str)
-    parser.add_argument('--ths', required=True, type=float)
+    parser.add_argument("--clean_method",default='ths',type=str)
+    parser.add_argument('--ths', default=0.0, type=float)
+    parser.add_argument('--ratio',default=0.0,type=float)
     parser.add_argument("--dataset", required=True, type=str)
     parser.add_argument("--dataset_path", default=None, type=str)
     parser.add_argument("--output_folder_path", default=None, type=str)
@@ -38,6 +40,9 @@ def get_args():
 
 DEFAULT_GPU = "cuda" if torch.cuda.is_available() else "cpu"
 
+BY_THRESHOLD="ths"
+BY_RATIO="ratio"
+
 args = get_args()
 N_LABEL = args.n_label
 SEED = args.seed
@@ -47,7 +52,19 @@ LEARNING_RATE = args.lr
 WEIGHT_DECAY = args.weight_decay
 BATCH_SIZE = args.batch_size
 EPOCH = args.epoch
-THERE_SHOULD = args.ths
+CLEAN_METHOD = args.clean_method
+THRESHOLD = args.ths
+RATIO = args.ratio
+CLEAN_METHOD_REP_LETTER='U'
+CLEAN_ARG = 0.0 
+if CLEAN_METHOD==BY_THRESHOLD:
+    assert THRESHOLD>0.0
+    CLEAN_METHOD_REP_LETTER='T'
+    CLEAN_ARG = THRESHOLD
+if CLEAN_METHOD==BY_RATIO:
+    assert 0.0<RATIO<1.0
+    CLEAN_METHOD_REP_LETTER='R'
+    CLEAN_ARG = RATIO
 DATASET_NAME = args.dataset
 DATASET_PATH = args.dataset_path
 if DATASET_PATH is None: DATASET_PATH = f'./dataset/{DATASET_NAME}/train.txt'
@@ -62,7 +79,7 @@ LOSS_FUNC_CLASS = {
 TEMP_FOLDER_PATH = get_folder_abs_path(TEMP_FOLDER_PATH)
 create_folder(TEMP_FOLDER_PATH)
 OUTPUT_FOLDER_PATH = args.output_folder_path
-if OUTPUT_FOLDER_PATH is None: OUTPUT_FOLDER_PATH = f'./dataset/{DATASET_NAME}/'
+if OUTPUT_FOLDER_PATH is None: OUTPUT_FOLDER_PATH = f'./dataset/{DATASET_NAME}/cleaned/'
 OUTPUT_FOLDER_PATH = get_folder_abs_path(OUTPUT_FOLDER_PATH)
 create_folder(OUTPUT_FOLDER_PATH)
 TEMP_MODEL_PATH = args.temp_model_path
@@ -73,7 +90,7 @@ create_folder(TEMP_MODEL_PATH)
 N_SPLIT = args.n_split
 CONFIG = BertConfig(num_labels=N_LABEL)
 MODEL_TYPE = "bert-base-uncased"
-CLEANED_DATASET_SAVE_FILE_NAME = f"{DATASET_NAME}_cleaned_split{N_SPLIT}_e{EPOCH}_b{BATCH_SIZE}_ml{MAX_LENGTH}_lr{LEARNING_RATE}_lf{LOSS_FUNC_NAME}_l2{WEIGHT_DECAY}_s{SEED}.txt"
+CLEANED_DATASET_SAVE_FILE_NAME = f"{DATASET_NAME}_cleaned_cm{CLEAN_METHOD_REP_LETTER}({CLEAN_ARG})_split{N_SPLIT}_e{EPOCH}_b{BATCH_SIZE}_ml{MAX_LENGTH}_lr{LEARNING_RATE}_lf{LOSS_FUNC_NAME}_l2{WEIGHT_DECAY}_s{SEED}.txt"
 CLEANED_DATASET_SAVE_FILE_PATH = f"{OUTPUT_FOLDER_PATH}{CLEANED_DATASET_SAVE_FILE_NAME}"
 
 def get_datasets(original_dataset: Dataset, split_n: int, seed: int) -> Tuple[list, list]:
@@ -100,6 +117,30 @@ def get_datasets(original_dataset: Dataset, split_n: int, seed: int) -> Tuple[li
     return (res0, res1)
 
 
+def clean(tokenizer, model: nn.Module, dataset: Dataset, loss_func_class, threshold: float, gpu: str = DEFAULT_GPU,
+           cpu: str = "cpu") -> Tuple[list,list]:
+    reserved = []
+    deleted = []
+    data_loader = DataLoader(dataset, batch_size=1, shuffle=False, drop_last=False)
+    loss_func = loss_func_class()
+    model.eval()
+    model.to(gpu)
+    with torch.no_grad():
+        for step, batch in enumerate(tqdm(data_loader)):
+            b_x = batch[0]
+            b_y = batch[1].to(gpu)
+            input_dict = tokenizer(b_x, return_tensors='pt', padding=True, truncation=True, max_length=MAX_LENGTH)
+            train.to_device(input_dict, gpu)
+            output = model(**input_dict)
+            loss = loss_func(output.logits, b_y)
+            loss = loss.to(cpu)
+            if loss.detach().numpy() < threshold:
+                reserved.append((b_x[0], b_y[0]))
+            else:
+                deleted.append((b_x[0], b_y[0]))
+    return reserved, deleted
+
+
 hyper_params = {
     'loss_func_class': torch.nn.CrossEntropyLoss,
     'optimizer_class': torch.optim.Adam,
@@ -124,29 +165,6 @@ pos_sets, neg_sets = get_datasets(train_set, N_SPLIT, SEED)
 #     for data in loader:
 #         print(data)
 
-def choose(tokenizer, model: nn.Module, dataset: Dataset, loss_func_class, there_should: float, gpu: str = DEFAULT_GPU,
-           cpu: str = "cpu") -> Tuple[list,list]:
-    reserved = []
-    deleted = []
-    data_loader = DataLoader(dataset, batch_size=1, shuffle=False, drop_last=False)
-    loss_func = loss_func_class()
-    model.eval()
-    model.to(gpu)
-    with torch.no_grad():
-        for step, batch in enumerate(tqdm(data_loader)):
-            b_x = batch[0]
-            b_y = batch[1].to(gpu)
-            input_dict = tokenizer(b_x, return_tensors='pt', padding=True, truncation=True, max_length=MAX_LENGTH)
-            train.to_device(input_dict, gpu)
-            output = model(**input_dict)
-            loss = loss_func(output.logits, b_y)
-            loss = loss.to(cpu)
-            if loss.detach().numpy() < there_should:
-                reserved.append((b_x[0], b_y[0]))
-            else:
-                deleted.append((b_x[0], b_y[0]))
-    return reserved, deleted
-
 
 tokenizer = BertTokenizer.from_pretrained(MODEL_TYPE)
 reserved_samples = []
@@ -157,7 +175,7 @@ for i in range(N_SPLIT):
     model = BertForSequenceClassification.from_pretrained(MODEL_TYPE, config=CONFIG)
     train.reload_or_train(this_model_save_path, copy_of_dict(hyper_params), tokenizer=tokenizer, model=model,
                           dataset=neg_sets[i], seed=SEED)
-    reserved_this,deleted_this = choose(tokenizer,model,dataset=pos_sets[i],loss_func_class=LOSS_FUNC_CLASS,there_should=THERE_SHOULD)
+    reserved_this,deleted_this = clean(tokenizer,model,dataset=pos_sets[i],loss_func_class=LOSS_FUNC_CLASS,threshold=THRESHOLD)
     reserved_samples.extend(reserved_this)
 
 reserved_dataset = ListDataset(reserved_samples)
