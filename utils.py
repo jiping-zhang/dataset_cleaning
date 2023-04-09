@@ -3,6 +3,7 @@ from typing import *
 import os
 import random
 
+
 def get_folder_abs_path(rel_path: str) -> str:
     ans = os.path.abspath(rel_path)
     ans = ans.replace("\\", "/") + "/"
@@ -25,19 +26,25 @@ def shuffle_array(arr: list, seed: int) -> None:
         arr[i] = temp
 
 
-def try_save(path:str) -> bool:
+def try_save1(path: str) -> bool:
     try:
-        with open(path,"w") as fout:
+        with open(path, "w+") as fout:
             fout.write("678")
-        with open(path,"r") as fin:
+        with open(path, "r") as fin:
             lines = fin.readlines()
-            if lines[0]=="678":
+            if lines[0] == "678":
                 return True
             return False
         return False
     except OSError as err:
         print(str(err))
         return False
+    
+def try_save(path: str) -> bool:
+    res = try_save1(path)
+    if res:
+        os.remove(path)
+    return res
 
 
 def copy_of_dict(d: dict) -> dict:
