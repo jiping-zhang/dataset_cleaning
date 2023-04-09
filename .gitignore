@@ -1,5 +1,5 @@
 **/*.pth
-./__pycache__/**/*
-./temp/**/*
-./**/play*
-./play*
+/__pycache__
+/temp
+/**/play*
+/play*
