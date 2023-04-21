@@ -4,6 +4,8 @@ import os
 import argparse
 import random
 from tqdm import tqdm
+import time # todo:remove this
+import copy
 
 import numpy as np
 import torch
@@ -38,6 +40,8 @@ def get_args():
     parser.add_argument("--seed", default=42, type=int)
     parser.add_argument("--n_split", default=2, type=int)
     parser.add_argument("--save_deleted",default="false",type=str)
+    parser.add_argument("--train_type",default="base",type=str)
+    parser.add_argument("--model_sentence_cache",default="./model_sentence_cache.pth",type=str)
     return parser.parse_args()
 
 
@@ -103,11 +107,14 @@ create_folder(TEMP_MODEL_PATH)
 N_SPLIT = args.n_split
 CONFIG = BertConfig(num_labels=N_LABEL)
 MODEL_TYPE = "bert-base-uncased"
-CLEANED_DATASET_SAVE_FILE_NAME = f"{DATASET_NAME}_cleaned_cm{CLEAN_METHOD_REP_LETTER}({CLEAN_ARG})_split{N_SPLIT}_e{EPOCH}_b{BATCH_SIZE}_ml{MAX_LENGTH}_lr{LEARNING_RATE}_lf{LOSS_FUNC_NAME}_l2{WEIGHT_DECAY}_s{SEED}.txt"
+TRAIN_TYPE = args.train_type
+TRAIN_TYPE_DESCRIPTION = "" if TRAIN_TYPE=="base" else f"_{TRAIN_TYPE}"
+CLEANED_DATASET_SAVE_FILE_NAME = f"{DATASET_NAME}_cleaned_cm{CLEAN_METHOD_REP_LETTER}({CLEAN_ARG}){TRAIN_TYPE_DESCRIPTION}_split{N_SPLIT}_e{EPOCH}_b{BATCH_SIZE}_ml{MAX_LENGTH}_lr{LEARNING_RATE}_lf{LOSS_FUNC_NAME}_l2{WEIGHT_DECAY}_s{SEED}.txt"
 CLEANED_DATASET_SAVE_FILE_PATH = f"{OUTPUT_FOLDER_PATH}{CLEANED_DATASET_SAVE_FILE_NAME}"
 DELETED_DATASET_SAVE_FILE_PATH = CLEANED_DATASET_SAVE_FILE_PATH.replace("_cleaned_","_deleted_")
 assert try_save(CLEANED_DATASET_SAVE_FILE_PATH)==True,f"can not save anything to file {CLEANED_DATASET_SAVE_FILE_PATH}"
 SAVE_DELETED=True if args.save_deleted.lower()=="true" else False
+MODEL_SENTENCE_CACHE=args.model_sentence_cache
 
 def get_datasets(original_dataset: Dataset, split_n: int, seed: int) -> Tuple[list, list]:
     # returns all the used datasets
@@ -133,8 +140,36 @@ def get_datasets(original_dataset: Dataset, split_n: int, seed: int) -> Tuple[li
     return (res0, res1)
 
 
+def list_to_tuple(obj1):
+    obj = copy.deepcopy(obj1)
+    if isinstance(obj,torch.Tensor):
+        obj=obj.detach().numpy()
+    if isinstance(obj,np.ndarray):
+        obj=obj.tolist()
+    if not isinstance(obj,list):
+        return obj
+    for i in range(len(obj)):
+        obj[i]=list_to_tuple(obj[i])
+    return tuple(obj)
+
+
+def cached(dict_cache:dict,batch,calculate_loss_func)->float:
+    batch_cache_key = list_to_tuple(batch)
+    if batch_cache_key in dict_cache:
+        return dict_cache[batch_cache_key]
+    loss = calculate_loss_func(batch)
+    dict_cache[batch_cache_key] = loss
+    return loss
+
+
 def get_loss_distribution(tokenizer, model: nn.Module, dataset: Dataset, loss_func_class, gpu: str = DEFAULT_GPU,
-           cpu: str = "cpu") -> List[float]:
+           cpu: str = "cpu",model_name:str=None) -> List[float]:
+    use_cache = model_name!=None
+    if use_cache:
+        cache = torch.load(MODEL_SENTENCE_CACHE)
+        if model_name not in cache:
+            cache[model_name] = dict()
+        cache_this = cache[model_name]
     res = list()
     data_loader = DataLoader(dataset, batch_size=1, shuffle=False, drop_last=False)
     loss_func = loss_func_class()
@@ -142,20 +177,35 @@ def get_loss_distribution(tokenizer, model: nn.Module, dataset: Dataset, loss_fu
     model.to(gpu)
     with torch.no_grad():
         for step, batch in enumerate(tqdm(data_loader)):
-            b_x = batch[0]
-            b_y = batch[1].to(gpu)
-            input_dict = tokenizer(b_x, return_tensors='pt', padding=True, truncation=True, max_length=MAX_LENGTH)
-            train.to_device(input_dict, gpu)
-            output = model(**input_dict)
-            loss = loss_func(output.logits, b_y)
-            loss = loss.to(cpu)
-            res.append(float(loss.detach().numpy()))
+            if use_cache:
+                batch_cache_key = list_to_tuple(batch)
+            if (not use_cache) or (batch_cache_key not in cache_this):
+                b_x = batch[0]
+                b_y = batch[1].to(gpu)
+                input_dict = tokenizer(b_x, return_tensors='pt', padding=True, truncation=True, max_length=MAX_LENGTH)
+                train.to_device(input_dict, gpu)
+                output = model(**input_dict)
+                loss = loss_func(output.logits, b_y)
+                loss = float(loss.to(cpu).detach().numpy())
+                res.append(loss)
+                if use_cache:
+                    cache_this[batch_cache_key]=loss
+            else:
+                loss = cache_this[batch_cache_key]
+        if use_cache:
+            torch.save(cache,MODEL_SENTENCE_CACHE)
     res.sort()
     return res
             
 
 def clean(tokenizer, model: nn.Module, dataset: Dataset, loss_func_class, threshold: float, gpu: str = DEFAULT_GPU,
-           cpu: str = "cpu") -> Tuple[list,list]:
+           cpu: str = "cpu",model_name:str=None) -> Tuple[list,list]:
+    use_cache = model_name!=None
+    if use_cache:
+        cache = torch.load(MODEL_SENTENCE_CACHE)
+        if model_name not in cache:
+            cache[model_name] = dict()
+        cache_this = cache[model_name]
     reserved = list()
     deleted = list()
     data_loader = DataLoader(dataset, batch_size=1, shuffle=False, drop_last=False)
@@ -164,17 +214,26 @@ def clean(tokenizer, model: nn.Module, dataset: Dataset, loss_func_class, thresh
     model.to(gpu)
     with torch.no_grad():
         for step, batch in enumerate(tqdm(data_loader)):
+            if use_cache:
+                batch_cache_key = list_to_tuple(batch)
             b_x = batch[0]
             b_y = batch[1].to(gpu)
-            input_dict = tokenizer(b_x, return_tensors='pt', padding=True, truncation=True, max_length=MAX_LENGTH)
-            train.to_device(input_dict, gpu)
-            output = model(**input_dict)
-            loss = loss_func(output.logits, b_y)
-            loss = loss.to(cpu)
-            if loss.detach().numpy() < threshold:
+            if (not use_cache) or (batch_cache_key not in cache_this):
+                input_dict = tokenizer(b_x, return_tensors='pt', padding=True, truncation=True, max_length=MAX_LENGTH)
+                train.to_device(input_dict, gpu)
+                output = model(**input_dict)
+                loss = loss_func(output.logits, b_y)
+                loss = loss.to(cpu).detach().numpy()
+                if use_cache:
+                    cache_this[batch_cache_key]=loss
+            else:
+                loss = cache_this[batch_cache_key] 
+            if loss < threshold:
                 reserved.append((b_x[0], b_y[0]))
             else:
                 deleted.append((b_x[0], b_y[0]))
+        if use_cache:
+            torch.save(cache,MODEL_SENTENCE_CACHE)
     return reserved, deleted
 
 
@@ -207,25 +266,33 @@ tokenizer = BertTokenizer.from_pretrained(MODEL_TYPE)
 all_reserved_data = list()
 all_deleted_data = list()
 for i in range(N_SPLIT):
-    print(f"cleaning the subset({i})")
-    this_model_save_name = f"{DATASET_NAME}_split{N_SPLIT}_neg({i})_e{EPOCH}_b{BATCH_SIZE}_ml{MAX_LENGTH}_lr{LEARNING_RATE}_lf{LOSS_FUNC_NAME}_l2{WEIGHT_DECAY}_s{SEED}.pth"
+    print(f"training model on neg_set({i})")
+    this_model_save_name = f"{DATASET_NAME}_split{N_SPLIT}_neg({i}){TRAIN_TYPE_DESCRIPTION}_e{EPOCH}_b{BATCH_SIZE}_ml{MAX_LENGTH}_lr{LEARNING_RATE}_lf{LOSS_FUNC_NAME}_l2{WEIGHT_DECAY}_s{SEED}.pth"
     this_model_save_path = f"{TEMP_MODEL_PATH}{this_model_save_name}"
+    if os.path.exists(this_model_save_path):
+        continue
     model = BertForSequenceClassification.from_pretrained(MODEL_TYPE, config=CONFIG)
     train.reload_or_train(this_model_save_path, copy_of_dict(hyper_params), tokenizer=tokenizer, model=model,
-                          dataset=neg_sets[i], seed=SEED)
+                          dataset=neg_sets[i], seed=SEED,training_type=TRAIN_TYPE)
+for i in range(N_SPLIT):
+    print(f"cleaning pos_set({i})")
+    this_model_save_name = f"{DATASET_NAME}_split{N_SPLIT}_neg({i}){TRAIN_TYPE_DESCRIPTION}_e{EPOCH}_b{BATCH_SIZE}_ml{MAX_LENGTH}_lr{LEARNING_RATE}_lf{LOSS_FUNC_NAME}_l2{WEIGHT_DECAY}_s{SEED}.pth"
+    this_model_save_path = f"{TEMP_MODEL_PATH}{this_model_save_name}"
+    model = BertForSequenceClassification.from_pretrained(MODEL_TYPE, config=CONFIG)
+    model.load_state_dict(torch.load(this_model_save_path))
     ths = 0.0
     if CLEAN_METHOD == BY_THRESHOLD:
         ths = THRESHOLD
     elif CLEAN_METHOD == BY_RATIO:
-        loss_distribution = get_loss_distribution(tokenizer,model,dataset=pos_sets[i],loss_func_class=LOSS_FUNC_CLASS)
+        loss_distribution = get_loss_distribution(tokenizer,model,dataset=pos_sets[i],loss_func_class=LOSS_FUNC_CLASS,model_name=this_model_save_path)
         ths = loss_distribution[int(len(loss_distribution)*(1.0-RATIO))]
     elif CLEAN_METHOD == BY_OTHER:
         if OTHER_ARG==BY_OTHER_AVG:
-           loss_distribution = get_loss_distribution(tokenizer,model,dataset=pos_sets[i],loss_func_class=LOSS_FUNC_CLASS)
+           loss_distribution = get_loss_distribution(tokenizer,model,dataset=pos_sets[i],loss_func_class=LOSS_FUNC_CLASS,model_name=this_model_save_path)
            ths = np.average(np.array(loss_distribution,dtype=float))
         else:
             print(f"other clean method <{OTHER_ARG}> is currently not supported")    
-    reserved_data,deleted_data = clean(tokenizer,model,dataset=pos_sets[i],loss_func_class=LOSS_FUNC_CLASS,threshold=ths)
+    reserved_data,deleted_data = clean(tokenizer,model,dataset=pos_sets[i],loss_func_class=LOSS_FUNC_CLASS,threshold=ths,model_name=this_model_save_path)
     all_reserved_data.extend(reserved_data)
     if SAVE_DELETED:
         all_deleted_data.extend(deleted_data)

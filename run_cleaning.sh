@@ -8,6 +8,8 @@ python ./cleaning.py --clean_method ths --ths 0.5 --n_split 2 --epoch 4 --batch_
 python ./cleaning.py --clean_method ths --ths 0.6 --n_split 2 --epoch 4 --batch_size 8 --max_len 64 --dataset sst2
 python ./cleaning.py --clean_method ths --ths 0.7 --n_split 2 --epoch 4 --batch_size 8 --max_len 64 --dataset sst2
 
+python ./cleaning.py --clean_method ths --ths 0.1 --n_split 2 --epoch 4 --batch_size 8 --max_len 64 --dataset sst2 --train_type freelb
+
 python ./cleaning.py --clean_method ths --ths 0.2 --n_split 2 --epoch 4 --batch_size 8 --max_len 64 --dataset sst2
 python ./cleaning.py --clean_method ths --ths 0.2 --n_split 3 --epoch 4 --batch_size 8 --max_len 64 --dataset sst2
 python ./cleaning.py --clean_method ths --ths 0.2 --n_split 4 --epoch 4 --batch_size 8 --max_len 64 --dataset sst2

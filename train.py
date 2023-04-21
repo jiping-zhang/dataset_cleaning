@@ -2,6 +2,7 @@ from typing import *
 
 import os
 from tqdm import tqdm
+import time  # todo:remove this
 
 import numpy as np
 import torch
@@ -124,11 +125,13 @@ def train_model(tokenizer, model: torch.nn.Module, dataset: Dataset,
     for _ in tqdm(range(epoch), desc=tqdm_desc):
         model.train()
         for step, batch in enumerate(tqdm(data_loader, desc=tqdm_desc)):
+            # if step%10==1:
+            #     time.sleep(1)
             b_y = batch[1].to(gpu)
             input_dict = tokenizer(
                 batch[0], return_tensors='pt', padding=True, truncation=True, max_length=max_len)
             to_device(input_dict, gpu)
-            train_batch(model, input_dict, b_y, loss_func,optimizer)
+            train_batch(model, input_dict, b_y, loss_func, optimizer)
             #train_batch(model, input_dict, b_y, loss_func,optimizer,step%50==0)
         if best_save_path is not None:
             acc = evaluate(tokenizer=tokenizer, model=model, dataset=validset, max_len=max_len, batch_size=batch_size,
@@ -143,8 +146,8 @@ def train_model(tokenizer, model: torch.nn.Module, dataset: Dataset,
 
 
 def train_model_freelb(tokenizer, model: torch.nn.Module, dataset: Dataset,
-                       loss_func_class, optimizer_class, lr: float, epoch: int, batch_size: int, max_len: int,
-                       asteps: int, adv_lr: float, weight_decay: float, seed: int = 42,
+                       loss_func_class, optimizer_class, lr: float, epoch: int, batch_size: int, max_len: int, weight_decay: float,
+                       asteps: int = 5, adv_lr: float = 1e-5,  seed: int = 42,
                        cpu: str = 'cpu', gpu: str = 'cuda', tqdm_desc: str = None, best_save_path: str = None,
                        validset: Dataset = None) -> str:
     print(
@@ -217,7 +220,7 @@ def reload_or_train(path: str, train_params: dict, tokenizer=None, model=None, d
     if os.path.exists(path):
         model.load_state_dict(torch.load(path))
     else:
-        assert try_save(path)==True,f"cannot save anything to {path}"
+        assert try_save(path) == True, f"cannot save anything to {path}"
         if 'tokenizer' not in train_params:
             train_params['tokenizer'] = tokenizer
         if 'model' not in train_params:
