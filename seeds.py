@@ -1,7 +1,8 @@
 import random
 import os
-import torch
+
 import numpy as np
+import torch
 
 def set_seed(seed:int=42):
     if seed is not None:

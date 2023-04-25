@@ -19,3 +19,5 @@ python ./cleaning.py --clean_method ratio --ratio 0.01 --n_split 2 --epoch 4 --b
 python ./cleaning.py --clean_method ratio --ratio 0.03 --n_split 2 --epoch 4 --batch_size 8 --max_len 64 --dataset sst2
 python ./cleaning.py --clean_method ratio --ratio 0.05 --n_split 2 --epoch 4 --batch_size 8 --max_len 64 --dataset sst2
 python ./cleaning.py --clean_method ratio --ratio 0.1 --n_split 2 --epoch 4 --batch_size 8 --max_len 64 --dataset sst2
+
+python ./cleaning.py --clean_method ths --ths 0.1 --n_split 2 --epoch 4 --batch_size 4 --max_len 256 --dataset imdb

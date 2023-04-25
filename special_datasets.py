@@ -1,11 +1,11 @@
 from typing import *
-from torch.utils.data import Dataset, DataLoader
 
+from torch.utils.data import Dataset, DataLoader
 
 class TxtDataset(Dataset):
     def __init__(self, path: str):
         super(TxtDataset, self).__init__()
-        with open(path) as fin:
+        with open(path,encoding="utf-8") as fin:
             raw = fin.readlines()
             after_process = list()
             for line in raw:
@@ -40,7 +40,7 @@ class ReorderedDataset(Dataset):
 
 
 class ListDataset(Dataset):
-    def __init__(self, datas:List[tuple]):
+    def __init__(self, datas:List[Tuple[str,int]]):
         super(ListDataset, self).__init__()
         self.datas = datas
 
@@ -54,7 +54,7 @@ class ListDataset(Dataset):
 
 def save_dataset(dataset: Dataset, path: str):
     data_loader = DataLoader(dataset, batch_size=1, shuffle=False, drop_last=False)
-    with open(path,'w') as fout:
+    with open(path,'w',encoding="utf-8") as fout:
         for b_x, b_y in data_loader:
             x = b_x[0]
             y = int(b_y[0])
