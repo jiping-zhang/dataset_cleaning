@@ -1,0 +1,1 @@
+python ./train.py --train_set_name sst2 --train_set_path ./dataset/sst2/train.txt --valid_set_path ./dataset/sst2/dev.txt --max_len 64 --batch_size 8

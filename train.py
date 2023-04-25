@@ -3,6 +3,7 @@ from typing import *
 import os
 from tqdm import tqdm
 import time  # todo:remove this
+import argparse
 
 import numpy as np
 import torch
@@ -13,7 +14,8 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 
 from seeds import set_seed
 from eval import evaluate
-from utils import try_save
+from utils import *
+import special_datasets
 
 DEFAULT_GPU = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -85,8 +87,8 @@ def train_batch(model, input_dict, b_y, loss_func, optimizer, print_loss=False):
 def train_model(tokenizer, model: torch.nn.Module, dataset: Dataset,
                 loss_func_class, optimizer_class, lr: float, epoch: int, batch_size: int, max_len: int,
                 weight_decay: float, seed: int = 42,
-                cpu: str = 'cpu', gpu: str = 'cuda', tqdm_desc: str = None, best_save_path: str = None,
-                validset: Dataset = None) -> str:
+                cpu: str = 'cpu', gpu: str = 'cuda', tqdm_desc: str = None, best_save_path: Optional[str] = None,
+                validset: Optional[Dataset] = None) -> str:
     print(
         f"start training , hyper params:\nepoch:{epoch},batch_size:{batch_size},max_len{max_len}\nlr:{lr},l2norm:{weight_decay}\nseed:{seed}")
 
@@ -94,10 +96,10 @@ def train_model(tokenizer, model: torch.nn.Module, dataset: Dataset,
         if validset is None:
             raise ValueError(
                 'You have to provide a valid set if you wan\'t to save the best epoch during training')
-        pos = best_save_path.rfind('.')
-        test_save_path = best_save_path[:pos] + '.test'
-        with open(test_save_path, 'w') as fout:
-            fout.write("test")
+        # pos = best_save_path.rfind('.')
+        # test_save_path = best_save_path[:pos] + '.test'
+        # with open(test_save_path, 'w') as fout:
+        #     fout.write("test")
 
     set_seed(seed)
 
@@ -248,3 +250,67 @@ def reload_or_train(path: str, train_params: dict, tokenizer=None, model=None, d
         train_model_func(**train_params)
         model.to(cpu)
         torch.save(model.state_dict(), path)
+
+
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output_folder_path",type=str,default="./model")
+    parser.add_argument("--train_set_path",type=str,required=True)
+    parser.add_argument("--train_set_name",type=str,default="")
+    parser.add_argument("--valid_set_path",type=str,default="")
+    parser.add_argument("--n_label",type=int,default=2)
+    parser.add_argument("--lr",type=float,default=2e-5)
+    parser.add_argument("--weight_decay",type=float,default=1e-5)
+    parser.add_argument("--max_len",type=int,required=True)
+    parser.add_argument("--batch_size",type=int,default=1)
+    parser.add_argument("--epoch",type=int,default=4)
+    parser.add_argument("--seed", default=42, type=int)
+    return parser.parse_args()
+     
+    
+if __name__=="__main__":
+    args = get_args()
+    
+    OUTPUT_FOLDER_PATH = get_folder_abs_path(args.output_folder_path)
+    assert os.path.exists(OUTPUT_FOLDER_PATH),f"output folder {OUTPUT_FOLDER_PATH} doesn't exist"
+    
+    TRAIN_SET_PATH = args.train_set_path
+    TRAIN_SET_NAME = args.train_set_name
+    if TRAIN_SET_NAME=="":
+        TRAIN_SET_NAME = get_filename(TRAIN_SET_PATH)
+    
+    VALID_SET_PATH = args.valid_set_path
+    USE_VALID_SET = VALID_SET_PATH!=""
+    if not USE_VALID_SET:
+        print("warning: training without a valid set")   
+        
+    N_LABEL = args.n_label
+    SEED = args.seed
+    set_seed(SEED)
+    MAX_LENGTH = args.max_len
+    LEARNING_RATE = args.lr
+    WEIGHT_DECAY = args.weight_decay
+    EPOCH = args.epoch
+    BATCH_SIZE = args.batch_size
+    LAST_SAVE_PATH = f"{OUTPUT_FOLDER_PATH}L_lr{LEARNING_RATE}_l2{WEIGHT_DECAY}_e{EPOCH}_b{BATCH_SIZE}_ml{MAX_LENGTH}_{TRAIN_SET_NAME}.pth"
+    BEST_SAVE_PATH = f"{OUTPUT_FOLDER_PATH}B_lr{LEARNING_RATE}_l2{WEIGHT_DECAY}_e{EPOCH}_b{BATCH_SIZE}_ml{MAX_LENGTH}_{TRAIN_SET_NAME}.pth"
+    assert not os.path.exists(LAST_SAVE_PATH),"model already exists"
+    assert try_save(LAST_SAVE_PATH),f"error,cannot save anything to {LAST_SAVE_PATH}"
+    
+    train_set = special_datasets.TxtDataset(TRAIN_SET_PATH)
+    if USE_VALID_SET:
+        valid_set = special_datasets.TxtDataset(VALID_SET_PATH)
+        assert not os.path.exists(BEST_SAVE_PATH),"model already exists" 
+        assert try_save(BEST_SAVE_PATH),f"error,cannot save anything to {BEST_SAVE_PATH}"
+        
+    from transformers import BertTokenizer,BertConfig,BertForSequenceClassification
+    MODEL_TYPE = "bert-base-uncased"
+    CONFIG = BertConfig.from_pretrained(MODEL_TYPE,num_labels = N_LABEL)
+    
+    model = BertForSequenceClassification.from_pretrained(MODEL_TYPE, config=CONFIG)
+    tokenizer = BertTokenizer.from_pretrained(MODEL_TYPE)
+    train_model(tokenizer,model,dataset=train_set,
+                loss_func_class=torch.nn.CrossEntropyLoss,optimizer_class=torch.optim.Adam,lr=LEARNING_RATE,
+                epoch=EPOCH,batch_size=BATCH_SIZE,max_len=MAX_LENGTH,weight_decay=WEIGHT_DECAY,seed=SEED,
+                best_save_path=BEST_SAVE_PATH if USE_VALID_SET else None,validset=valid_set if USE_VALID_SET else None)
+    torch.save(model.state_dict(),LAST_SAVE_PATH)    

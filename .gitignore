@@ -1,5 +1,6 @@
 **/*.pth
 /__pycache__
 /temp
+/model
 /**/play*
 /play*

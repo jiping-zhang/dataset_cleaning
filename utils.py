@@ -15,6 +15,17 @@ def create_folder(path: str):
     dir_name = os.path.dirname(path)
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
+        
+def get_filename(file_path:str)->str:
+    file_path = file_path.replace("\\","/")
+    filename_with_postfix = file_path
+    idx = filename_with_postfix.rfind("/")
+    if idx!=-1:
+        filename_with_postfix=filename_with_postfix[idx+1:]
+    idx = filename_with_postfix.rfind(".")
+    if idx==-1:
+        return filename_with_postfix
+    return filename_with_postfix[:idx]
 
 
 def shuffle_array(arr: list, seed: int) -> None:
