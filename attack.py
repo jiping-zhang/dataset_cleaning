@@ -1,10 +1,13 @@
-import torch
-from transformers import BertConfig,BertTokenizer,BertForSequenceClassification
+import argparse
+
+from transformers import BertConfig,BertForSequenceClassification,BertTokenizer
 import textattack
 
-import special_datasets
+arg_parser = argparse.ArgumentParser()
+arg_parser.add_argument("--n_label",type=int,default=2)
+arg_parser.add_argument("--model_path",type=str,required=True)
+arg_parser.add_argument("--test_set",type=str,required=True)
+args = arg_parser.parse_args()
 
-MODEL_PARAM_PATH = "./model/B_lr2e-05_l21e-05_e4_b8_ml64_sst2.pth"
-N_LABEL = 2
-MODEL_TYPE = "bert-base-uncased"
-CONFIG = BertConfig.from_pretrained(MODEL_TYPE,num_labels = N_LABEL)
+N_LABEL = args.n_label
+MODEL_PATH = args.model_path

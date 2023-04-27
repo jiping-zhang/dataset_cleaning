@@ -33,6 +33,7 @@ def get_args():
     parser.add_argument("--other_arg",default="unknown",type=str)
     parser.add_argument("--dataset", required=True, type=str)
     parser.add_argument("--dataset_path", default=None, type=str)
+    parser.add_argument("--on_test_set",default="false",type=str)
     parser.add_argument("--output_folder_path", default=None, type=str)
     parser.add_argument("--temp_folder_path", default=None, type=str)
     parser.add_argument("--temp_model_path", default=None, type=str)
@@ -69,6 +70,7 @@ RATIO = args.ratio
 OTHER_ARG = args.other_arg
 CLEAN_METHOD_REP_LETTER='U'
 CLEAN_ARG = 0.0 
+ON_TEST_SET = args.on_test_set.lower()=="true"
 assert CLEAN_METHOD in ALL_CLEAN_METHODS,f"only {ALL_CLEAN_METHODS} clean methods are supported, your input:{CLEAN_METHOD}"
 if CLEAN_METHOD==BY_THRESHOLD:
     assert THRESHOLD>0.0
@@ -84,7 +86,8 @@ elif CLEAN_METHOD==BY_OTHER:
     CLEAN_ARG = OTHER_ARG
 DATASET_NAME = args.dataset
 DATASET_PATH = args.dataset_path
-if DATASET_PATH is None: DATASET_PATH = f'./dataset/{DATASET_NAME}/train.txt'
+ON_WHICH = "train" if not ON_TEST_SET else "test"
+if DATASET_PATH is None: DATASET_PATH = f'./dataset/{DATASET_NAME}/{ON_WHICH}.txt'
 VALIDSET_PATH = DATASET_PATH.replace("train.txt", "dev.txt")
 LOSS_FUNC_NAME = args.loss_func
 TEMP_FOLDER_PATH = args.temp_folder_path
@@ -93,23 +96,24 @@ LOSS_FUNC_CLASS = {
     'CE': torch.nn.CrossEntropyLoss,
     'MSE': torch.nn.MSELoss,
 }[LOSS_FUNC_NAME]
-TEMP_FOLDER_PATH = get_folder_abs_path(TEMP_FOLDER_PATH)
+TEMP_FOLDER_PATH = TEMP_FOLDER_PATH
 create_folder(TEMP_FOLDER_PATH)
 OUTPUT_FOLDER_PATH = args.output_folder_path
 if OUTPUT_FOLDER_PATH is None: OUTPUT_FOLDER_PATH = f'./dataset/{DATASET_NAME}/cleaned/'
-OUTPUT_FOLDER_PATH = get_folder_abs_path(OUTPUT_FOLDER_PATH)
+OUTPUT_FOLDER_PATH = OUTPUT_FOLDER_PATH
 create_folder(OUTPUT_FOLDER_PATH)
 TEMP_MODEL_PATH = args.temp_model_path
 if TEMP_MODEL_PATH is None:
     TEMP_MODEL_PATH = "./temp/"
-TEMP_MODEL_PATH = get_folder_abs_path(TEMP_MODEL_PATH)
+TEMP_MODEL_PATH = TEMP_MODEL_PATH
 create_folder(TEMP_MODEL_PATH)
 N_SPLIT = args.n_split
 CONFIG = BertConfig(num_labels=N_LABEL)
 MODEL_TYPE = "bert-base-uncased"
 TRAIN_TYPE = args.train_type
 TRAIN_TYPE_DESCRIPTION = "" if TRAIN_TYPE=="base" else f"_{TRAIN_TYPE}"
-CLEANED_DATASET_SAVE_FILE_NAME = f"{DATASET_NAME}_cleaned_cm{CLEAN_METHOD_REP_LETTER}({CLEAN_ARG}){TRAIN_TYPE_DESCRIPTION}_split{N_SPLIT}_e{EPOCH}_b{BATCH_SIZE}_ml{MAX_LENGTH}_lr{LEARNING_RATE}_lf{LOSS_FUNC_NAME}_l2{WEIGHT_DECAY}_s{SEED}.txt"
+ON_WHICH_DESC = "" if not ON_TEST_SET else "_test"
+CLEANED_DATASET_SAVE_FILE_NAME = f"{DATASET_NAME}{ON_WHICH_DESC}_cleaned_cm{CLEAN_METHOD_REP_LETTER}({CLEAN_ARG}){TRAIN_TYPE_DESCRIPTION}_split{N_SPLIT}_e{EPOCH}_b{BATCH_SIZE}_ml{MAX_LENGTH}_lr{LEARNING_RATE}_lf{LOSS_FUNC_NAME}_l2{WEIGHT_DECAY}_s{SEED}.txt"
 CLEANED_DATASET_SAVE_FILE_PATH = f"{OUTPUT_FOLDER_PATH}{CLEANED_DATASET_SAVE_FILE_NAME}"
 DELETED_DATASET_SAVE_FILE_PATH = CLEANED_DATASET_SAVE_FILE_PATH.replace("_cleaned_","_deleted_")
 assert try_save(CLEANED_DATASET_SAVE_FILE_PATH)==True,f"can not save anything to file {CLEANED_DATASET_SAVE_FILE_PATH}"
@@ -267,7 +271,7 @@ all_reserved_data = list()
 all_deleted_data = list()
 for i in range(N_SPLIT):
     print(f"training model on neg_set({i})")
-    this_model_save_name = f"{DATASET_NAME}_split{N_SPLIT}_neg({i}){TRAIN_TYPE_DESCRIPTION}_e{EPOCH}_b{BATCH_SIZE}_ml{MAX_LENGTH}_lr{LEARNING_RATE}_lf{LOSS_FUNC_NAME}_l2{WEIGHT_DECAY}_s{SEED}.pth"
+    this_model_save_name = f"{DATASET_NAME}{ON_WHICH_DESC}_split{N_SPLIT}_neg({i}){TRAIN_TYPE_DESCRIPTION}_e{EPOCH}_b{BATCH_SIZE}_ml{MAX_LENGTH}_lr{LEARNING_RATE}_lf{LOSS_FUNC_NAME}_l2{WEIGHT_DECAY}_s{SEED}.pth"
     this_model_save_path = f"{TEMP_MODEL_PATH}{this_model_save_name}"
     if os.path.exists(this_model_save_path):
         continue
@@ -276,7 +280,7 @@ for i in range(N_SPLIT):
                           dataset=neg_sets[i], seed=SEED,training_type=TRAIN_TYPE)
 for i in range(N_SPLIT):
     print(f"cleaning pos_set({i})")
-    this_model_save_name = f"{DATASET_NAME}_split{N_SPLIT}_neg({i}){TRAIN_TYPE_DESCRIPTION}_e{EPOCH}_b{BATCH_SIZE}_ml{MAX_LENGTH}_lr{LEARNING_RATE}_lf{LOSS_FUNC_NAME}_l2{WEIGHT_DECAY}_s{SEED}.pth"
+    this_model_save_name = f"{DATASET_NAME}{ON_WHICH_DESC}_split{N_SPLIT}_neg({i}){TRAIN_TYPE_DESCRIPTION}_e{EPOCH}_b{BATCH_SIZE}_ml{MAX_LENGTH}_lr{LEARNING_RATE}_lf{LOSS_FUNC_NAME}_l2{WEIGHT_DECAY}_s{SEED}.pth"
     this_model_save_path = f"{TEMP_MODEL_PATH}{this_model_save_name}"
     model = BertForSequenceClassification.from_pretrained(MODEL_TYPE, config=CONFIG)
     model.load_state_dict(torch.load(this_model_save_path))

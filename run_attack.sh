@@ -1,0 +1,1 @@
+python ./attack.py --test_set "./dataset/sst2/test.txt" --model_path "./model/B_lr2e-05_l21e-05_e4_b8_ml64_sst2.pth"

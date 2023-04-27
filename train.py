@@ -96,10 +96,12 @@ def train_model(tokenizer, model: torch.nn.Module, dataset: Dataset,
         if validset is None:
             raise ValueError(
                 'You have to provide a valid set if you wan\'t to save the best epoch during training')
-        # pos = best_save_path.rfind('.')
-        # test_save_path = best_save_path[:pos] + '.test'
+        pos = best_save_path.rfind('.')
+        test_save_path = best_save_path[:pos] + '.test'
         # with open(test_save_path, 'w') as fout:
         #     fout.write("test")
+        print(best_save_path)
+        torch.save(dict(),test_save_path)
 
     set_seed(seed)
 
@@ -254,7 +256,7 @@ def reload_or_train(path: str, train_params: dict, tokenizer=None, model=None, d
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output_folder_path",type=str,default="./model")
+    parser.add_argument("--output_folder_path",type=str,default="./model/")
     parser.add_argument("--train_set_path",type=str,required=True)
     parser.add_argument("--train_set_name",type=str,default="")
     parser.add_argument("--valid_set_path",type=str,default="")
@@ -271,7 +273,7 @@ def get_args():
 if __name__=="__main__":
     args = get_args()
     
-    OUTPUT_FOLDER_PATH = get_folder_abs_path(args.output_folder_path)
+    OUTPUT_FOLDER_PATH = args.output_folder_path
     assert os.path.exists(OUTPUT_FOLDER_PATH),f"output folder {OUTPUT_FOLDER_PATH} doesn't exist"
     
     TRAIN_SET_PATH = args.train_set_path
